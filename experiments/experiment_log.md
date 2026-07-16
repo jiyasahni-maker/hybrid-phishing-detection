@@ -115,3 +115,31 @@ The baseline XGBoost classifier already achieved near-perfect performance on the
 4	ROC-AUC	1.0	1.0
 
 *****************************************************************************************************
+## Experiment 4 – Soft Voting Ensemble
+
+### Objective
+Combine Logistic Regression, Random Forest, and the tuned XGBoost classifier using soft voting to evaluate whether an ensemble improves phishing website detection performance.
+
+### Ensemble Members
+- Logistic Regression
+- Random Forest
+- Tuned XGBoost
+
+### Voting Strategy
+Soft Voting
+
+### Evaluation Metrics
+- Accuracy
+- Precision
+- Recall
+- F1-score
+- ROC-AUC
+- 5-Fold Cross Validation
+
+### Output Files
+- models/ensemble.pkl
+- results/ensemble_metrics.csv
+- results/model_comparison.csv
+- reports/figures/confusion_matrix_ensemble.png
+- reports/figures/roc_ensemble.png
+********************************************************************************************************

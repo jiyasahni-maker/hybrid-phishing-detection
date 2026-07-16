@@ -1,0 +1,6 @@
+Model,Accuracy,Precision,Recall,F1,ROC-AUC
+Logistic Regression,0.999618312517229,0.9993700437263766,0.999962921764924,0.9996663948402402,0.999997048654031
+Random Forest,1.0,1.0,1.0,1.0,1.0
+Baseline XGBoost,1.0,1.0,1.0,1.0,0.9999999999999999
+Tuned XGBoost,1.0,1.0,1.0,1.0,1.0
+Soft Voting Ensemble,1.0,1.0,1.0,1.0,1.0
