@@ -1,5 +1,7 @@
 import requests
-
+from difflib import SequenceMatcher
+from urllib.parse import urlparse
+print("✅ Loaded FeatureExtractor from:", __file__)
 
 class FeatureExtractor:
     """
@@ -10,8 +12,15 @@ class FeatureExtractor:
     SPECIAL_CHARS = "!@#$%^&*()_+-={}[]|\\:;\"'<>,.?/~`"
 
     def __init__(self, url):
-        self.url = url.strip()
-        self.html = None  # Cache HTML after first download
+     self.url = url.strip()
+
+    # Automatically prepend https:// if missing
+     if not self.url.startswith(("http://", "https://")):
+        self.url = "https://" + self.url
+
+     print("Normalized URL:", self.url)
+
+     self.html = None  # Cache HTML after first download
 
     # ==========================================================
     # URL FEATURES
@@ -21,7 +30,7 @@ class FeatureExtractor:
         return len(self.url)
 
     def is_https(self):
-        return int(self.url.startswith("https"))
+      return int(urlparse(self.url).scheme.lower() == "https")
 
     def digit_count(self):
         return sum(c.isdigit() for c in self.url)
@@ -88,31 +97,36 @@ class FeatureExtractor:
         if self.html is not None:
             return self.html
 
-        try:
+        print(f"\nFetching URL: {self.url}")
 
+        try:
             response = requests.get(
                 self.url,
                 timeout=10,
+                allow_redirects=True,
                 headers={
-                    "User-Agent":
-                    "Mozilla/5.0"
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/126.0 Safari/537.36"
+                    )
                 }
             )
 
-            response.raise_for_status()
+            print("Status Code:", response.status_code)
+            print("Final URL :", response.url)
 
+            response.raise_for_status()
             self.html = response.text
 
-        except requests.RequestException:
-
+        except requests.RequestException as e:
+            print("Request Failed:", e)
             self.html = ""
 
         return self.html
 
     def line_count(self):
-
         html = self.get_html()
-
         return len(html.splitlines())
 
     def largest_line(self):
@@ -131,18 +145,56 @@ class FeatureExtractor:
     # ==========================================================
 
     def url_similarity_index(self):
-        """
-        TODO:
-        Replace placeholder with real implementation.
-        """
-        return 0
+        host = (urlparse(self.url).hostname or "").lower()
+
+        legitimate_domains = [
+            "google.com",
+            "youtube.com",
+            "facebook.com",
+            "instagram.com",
+            "amazon.com",
+            "microsoft.com",
+            "apple.com",
+            "github.com",
+            "linkedin.com",
+            "wikipedia.org",
+            "netflix.com",
+        ]
+
+        best = 0
+
+        for domain in legitimate_domains:
+            score = SequenceMatcher(None, host, domain).ratio()
+
+            if score > best:
+                best = score
+
+        return round(best * 100, 2)
 
     def tld_legitimate_prob(self):
-        """
-        TODO:
-        Replace placeholder with real implementation.
-        """
-        return 0
+        TLD_SCORES = {
+            "com": 0.99,
+            "org": 0.95,
+            "edu": 0.99,
+            "gov": 0.99,
+            "net": 0.90,
+            "io": 0.85,
+            "co": 0.80,
+            "in": 0.80,
+            "xyz": 0.20,
+            "top": 0.10,
+            "tk": 0.05,
+            "ml": 0.05,
+            "cf": 0.05,
+        }
+
+        host = urlparse(self.url).hostname or ""
+
+        if "." not in host:
+            return 0.50
+
+        tld = host.split(".")[-1].lower()
+        return TLD_SCORES.get(tld, 0.50)
 
     # ==========================================================
     # MAIN EXTRACTION

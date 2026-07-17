@@ -1,0 +1,178 @@
+/* -----------------------------
+GLOBAL
+------------------------------*/
+
+.stApp{
+    background:#0F172A;
+    color:#F8FAFC;
+}
+
+/* Main content */
+
+.block-container{
+    max-width:1200px;
+    padding-top:2rem;
+}
+
+/* -----------------------------
+HEADINGS
+------------------------------*/
+
+h1{
+    color:#F8FAFC;
+    font-weight:700;
+}
+
+h2,h3{
+    color:#E2E8F0;
+}
+
+/* -----------------------------
+BUTTON
+------------------------------*/
+
+.stButton>button{
+
+    background:#0EA5E9;
+
+    color:white;
+
+    border:none;
+
+    border-radius:10px;
+
+    font-weight:600;
+
+    height:48px;
+
+    transition:0.2s;
+}
+
+.stButton>button:hover{
+
+    background:#0284C7;
+
+    transform:translateY(-2px);
+
+}
+
+/* -----------------------------
+TEXT INPUT
+------------------------------*/
+
+.stTextInput input{
+
+    border-radius:10px;
+
+    border:1px solid #334155;
+
+    background:#1E293B;
+
+    color:white;
+
+}
+
+/* -----------------------------
+TABLES
+------------------------------*/
+
+table{
+
+    border-radius:10px;
+
+    overflow:hidden;
+
+}
+
+/* -----------------------------
+SIDEBAR
+------------------------------*/
+
+section[data-testid="stSidebar"]{
+
+    background:#111827;
+
+}
+
+/* -----------------------------
+METRICS
+------------------------------*/
+
+div[data-testid="metric-container"]{
+
+    background:#1E293B;
+
+    border:1px solid #334155;
+
+    border-radius:14px;
+
+    padding:18px;
+
+}
+
+/* -----------------------------
+SUCCESS
+------------------------------*/
+
+div.stSuccess{
+
+    border-radius:10px;
+
+}
+/* ==========================================
+DASHBOARD CARDS
+========================================== */
+
+.dashboard-card{
+
+    background:#1E293B;
+
+    border:1px solid #334155;
+
+    border-radius:16px;
+
+    padding:20px;
+
+    height:140px;
+
+    display:flex;
+
+    flex-direction:column;
+
+    justify-content:center;
+
+    transition:all .25s ease;
+
+    box-shadow:0 10px 30px rgba(0,0,0,.15);
+
+}
+
+.dashboard-card:hover{
+
+    transform:translateY(-6px);
+
+    border-color:#38BDF8;
+
+    box-shadow:0 16px 40px rgba(56,189,248,.15);
+
+}
+
+.card-title{
+
+    color:#94A3B8;
+
+    font-size:15px;
+
+    margin-bottom:18px;
+
+    font-weight:500;
+
+}
+
+.card-value{
+
+    font-size:28px;
+
+    font-weight:700;
+
+}

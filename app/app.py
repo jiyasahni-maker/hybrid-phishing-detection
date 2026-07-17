@@ -3,98 +3,198 @@ import streamlit as st
 from core.feature_extractor import FeatureExtractor
 from core.predictor import Predictor
 
-# -------------------------------------------------
-# Page Configuration
-# -------------------------------------------------
+from components.result_cards import show_result_cards
+from components.feature_table import show_feature_table
+
+from pathlib import Path
+
+def load_css():
+    css_file = Path(__file__).parent / "assets" / "styles.css"
+
+    with open(css_file) as f:
+        st.markdown(
+            f"<style>{f.read()}</style>",
+            unsafe_allow_html=True,
+        )
+
+load_css()
+# ---------------------------------------------------------
+# PAGE CONFIG
+# ---------------------------------------------------------
 
 st.set_page_config(
-    page_title="Hybrid Phishing Detection",
+    page_title="PHANTOM",
     page_icon="🛡️",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# -------------------------------------------------
-# Load Predictor
-# -------------------------------------------------
 
-predictor = Predictor()
+# ---------------------------------------------------------
+# LOAD MODEL
+# ---------------------------------------------------------
 
-# -------------------------------------------------
-# Title
-# -------------------------------------------------
+@st.cache_resource
+def load_predictor():
+    return Predictor()
 
-st.title(" Hybrid Phishing Website Detection")
+
+predictor = load_predictor()
+
+
+# ---------------------------------------------------------
+# HEADER
+# ---------------------------------------------------------
+
+st.markdown("""
+#  PHANTOM
+
+### Hybrid Ensemble-Based Phishing Website Detection
+""")
+
+st.markdown("""
+Analyze suspicious URLs using a machine learning ensemble consisting of **Logistic Regression**, **Random Forest**, and **XGBoost** classifiers.
+
+Enter a URL below to generate a phishing prediction and inspect the extracted security features.
+""")
+
+st.divider()
+
+st.caption("Hybrid Ensemble-Based Phishing Website Detection")
 
 st.write(
-    "Analyze suspicious URLs using our Soft Voting Ensemble Machine Learning model."
+    """
+Analyze suspicious websites using a **Soft Voting Ensemble Machine Learning Model**
+built with **Logistic Regression**, **Random Forest**, and **XGBoost** classifiers.
+
+Enter any website URL below to generate a phishing prediction along with the
+extracted URL and webpage features.
+"""
 )
 
 st.divider()
 
-# -------------------------------------------------
-# URL Input
-# -------------------------------------------------
 
-url = st.text_input(
-    "Enter Website URL",
-    placeholder="https://example.com"
-)
+# ---------------------------------------------------------
+# URL INPUT
+# ---------------------------------------------------------
 
-# -------------------------------------------------
-# Prediction
-# -------------------------------------------------
+left, right = st.columns([6, 1])
 
-if st.button("Analyze URL"):
+with left:
 
-    if url.strip() == "":
+    url = st.text_input(
+        label="Website URL",
+        placeholder="https://example.com",
+        label_visibility="collapsed"
+    )
 
-        st.warning("Please enter a URL.")
+with right:
+
+    analyze = st.button(
+        "Analyze",
+        use_container_width=True
+    )
+
+
+# ---------------------------------------------------------
+# PREDICTION
+# ---------------------------------------------------------
+
+if analyze:
+
+    if not url.strip():
+
+        st.warning("Please enter a valid URL.")
 
     else:
 
-        with st.spinner("Extracting Features..."):
+        progress = st.progress(
+            0,
+            text="Starting analysis..."
+        )
+
+        try:
+
+            progress.progress(
+                20,
+                text="Extracting URL features..."
+            )
 
             extractor = FeatureExtractor(url)
 
             features = extractor.extract()
 
-        with st.spinner("Running Ensemble Model..."):
+            progress.progress(
+                60,
+                text="Running ensemble model..."
+            )
 
             result = predictor.predict(features)
 
-        st.success("Analysis Complete!")
-
-        st.divider()
-
-        # -----------------------------------------
-        # Results
-        # -----------------------------------------
-
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-
-            st.metric(
-                "Prediction",
-                result["label"]
+            progress.progress(
+                100,
+                text="Generating report..."
             )
 
-        with col2:
+            progress.empty()
 
-            st.metric(
-                "Confidence",
-                f'{result["confidence"]}%'
-            )
+            st.success("Analysis Complete")
 
-        with col3:
+            st.divider()
 
-            st.metric(
-                "Threat Level",
-                result["threat_level"]
-            )
+            # --------------------------------------------
+            # RESULT CARDS
+            # --------------------------------------------
 
-        st.divider()
+            show_result_cards(result)
 
-        st.subheader("Extracted Features")
+            st.divider()
 
-        st.json(features)
+            # --------------------------------------------
+            # FEATURE TABLE
+            # --------------------------------------------
+
+            show_feature_table(features)
+
+        except Exception as e:
+
+            progress.empty()
+
+            st.error("Unable to analyze the provided URL.")
+
+            with st.expander("Error Details"):
+
+                st.code(str(e))
+
+
+# ---------------------------------------------------------
+# SIDEBAR
+# ---------------------------------------------------------
+
+with st.sidebar:
+
+    st.title(" PHANTOM")
+
+    st.markdown("---")
+
+    st.markdown(
+        """
+### Hybrid Ensemble
+
+This application detects phishing websites using:
+
+- Logistic Regression
+- Random Forest
+- XGBoost
+- Soft Voting Ensemble
+
+---
+
+Navigate using the pages above.
+"""
+    )
+
+    st.markdown("---")
+
+    st.caption("Version 1.0")
