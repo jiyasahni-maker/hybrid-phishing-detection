@@ -1,259 +1,154 @@
+# core/feature_extractor.py
+
+import re
 import requests
-from difflib import SequenceMatcher
-from urllib.parse import urlparse
-print("✅ Loaded FeatureExtractor from:", __file__)
+import pandas as pd
+
 
 class FeatureExtractor:
     """
-    Extract phishing-related URL and HTML features
-    from a given website.
+    Extracts the 10 features required by the phishing detection model.
     """
 
-    SPECIAL_CHARS = "!@#$%^&*()_+-={}[]|\\:;\"'<>,.?/~`"
+    FEATURE_ORDER = [
+        "LineOfCode",
+        "IsHTTPS",
+        "URLLength",
+        "CharContinuationRate",
+        "LetterRatioInURL",
+        "NoOfDegitsInURL",
+        "DegitRatioInURL",
+        "NoOfOtherSpecialCharsInURL",
+        "SpacialCharRatioInURL",
+        "LargestLineLength",
+    ]
 
-    def __init__(self, url):
-     self.url = url.strip()
+    def __init__(self, timeout=5):
+        self.timeout = timeout
 
-    # Automatically prepend https:// if missing
-     if not self.url.startswith(("http://", "https://")):
-        self.url = "https://" + self.url
+    # -----------------------------------------------------
+    # URL Validation
+    # -----------------------------------------------------
 
-     print("Normalized URL:", self.url)
+    def normalize_url(self, url: str) -> str:
+        url = url.strip()
 
-     self.html = None  # Cache HTML after first download
+        if not url.startswith(("http://", "https://")):
+            url = "https://" + url
 
-    # ==========================================================
-    # URL FEATURES
-    # ==========================================================
+        return url
 
-    def url_length(self):
-        return len(self.url)
+    # -----------------------------------------------------
+    # Download HTML
+    # -----------------------------------------------------
 
-    def is_https(self):
-      return int(urlparse(self.url).scheme.lower() == "https")
-
-    def digit_count(self):
-        return sum(c.isdigit() for c in self.url)
-
-    def digit_ratio(self):
-        length = len(self.url)
-        if length == 0:
-            return 0
-        return self.digit_count() / length
-
-    def letter_ratio(self):
-        length = len(self.url)
-        if length == 0:
-            return 0
-
-        letters = sum(c.isalpha() for c in self.url)
-        return letters / length
-
-    def special_char_count(self):
-        return sum(c in self.SPECIAL_CHARS for c in self.url)
-
-    def special_char_ratio(self):
-        length = len(self.url)
-        if length == 0:
-            return 0
-
-        return self.special_char_count() / length
-
-    def char_continuation_rate(self):
-        """
-        Approximation of CharContinuationRate.
-        """
-
-        length = len(self.url)
-
-        if length == 0:
-            return 0
-
-        longest = 1
-        current = 1
-
-        for i in range(1, length):
-
-            if self.url[i].isalnum() == self.url[i - 1].isalnum():
-
-                current += 1
-                longest = max(longest, current)
-
-            else:
-
-                current = 1
-
-        return longest / length
-
-    # ==========================================================
-    # HTML FEATURES
-    # ==========================================================
-
-    def get_html(self):
-        """
-        Downloads webpage once and caches it.
-        """
-
-        if self.html is not None:
-            return self.html
-
-        print(f"\nFetching URL: {self.url}")
-
+    def download_html(self, url):
         try:
             response = requests.get(
-                self.url,
-                timeout=10,
-                allow_redirects=True,
+                url,
+                timeout=self.timeout,
                 headers={
                     "User-Agent": (
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                        "Chrome/126.0 Safari/537.36"
+                        "Mozilla/5.0 "
+                        "(Windows NT 10.0; Win64; x64)"
                     )
-                }
+                },
             )
 
-            print("Status Code:", response.status_code)
-            print("Final URL :", response.url)
+            return response.text
 
-            response.raise_for_status()
-            self.html = response.text
+        except Exception:
+            return ""
 
-        except requests.RequestException as e:
-            print("Request Failed:", e)
-            self.html = ""
+    # -----------------------------------------------------
+    # HTML Features
+    # -----------------------------------------------------
 
-        return self.html
+    def html_features(self, html):
 
-    def line_count(self):
-        html = self.get_html()
-        return len(html.splitlines())
-
-    def largest_line(self):
-
-        html = self.get_html()
+        if not html:
+            return 0, 0
 
         lines = html.splitlines()
 
-        if not lines:
-            return 0
+        line_count = len(lines)
 
-        return max(len(line) for line in lines)
+        largest_line = max((len(line) for line in lines), default=0)
+        
+        # Cap largest_line at 1000 to avoid false positives from minified JS
+        # Modern websites often have extremely long lines due to minification
+        largest_line = min(largest_line, 1000)
 
-    # ==========================================================
-    # FUTURE FEATURES
-    # ==========================================================
+        return line_count, largest_line
 
-    def url_similarity_index(self):
-        host = (urlparse(self.url).hostname or "").lower()
+    # -----------------------------------------------------
+    # URL Features
+    # -----------------------------------------------------
 
-        legitimate_domains = [
-            "google.com",
-            "youtube.com",
-            "facebook.com",
-            "instagram.com",
-            "amazon.com",
-            "microsoft.com",
-            "apple.com",
-            "github.com",
-            "linkedin.com",
-            "wikipedia.org",
-            "netflix.com",
-        ]
+    def url_features(self, url):
 
-        best = 0
+        url_length = len(url)
 
-        for domain in legitimate_domains:
-            score = SequenceMatcher(None, host, domain).ratio()
+        is_https = 1 if url.lower().startswith("https://") else 0
 
-            if score > best:
-                best = score
+        letters = sum(c.isalpha() for c in url)
 
-        return round(best * 100, 2)
+        digits = sum(c.isdigit() for c in url)
 
-    def tld_legitimate_prob(self):
-        TLD_SCORES = {
-            "com": 0.99,
-            "org": 0.95,
-            "edu": 0.99,
-            "gov": 0.99,
-            "net": 0.90,
-            "io": 0.85,
-            "co": 0.80,
-            "in": 0.80,
-            "xyz": 0.20,
-            "top": 0.10,
-            "tk": 0.05,
-            "ml": 0.05,
-            "cf": 0.05,
+        special = sum(not c.isalnum() for c in url)
+
+        letter_ratio = letters / url_length if url_length else 0
+
+        digit_ratio = digits / url_length if url_length else 0
+
+        special_ratio = special / url_length if url_length else 0
+
+        # --------------------------------------------
+        # CharContinuationRate
+        # Longest contiguous sequence of alphanumeric
+        # characters divided by total URL length
+        # --------------------------------------------
+
+        sequences = re.findall(r"[A-Za-z0-9]+", url)
+
+        if sequences:
+            longest = max(len(seq) for seq in sequences)
+        else:
+            longest = 0
+
+        continuation_rate = longest / url_length if url_length else 0
+
+        return {
+            "URLLength": url_length,
+            "IsHTTPS": is_https,
+            "CharContinuationRate": continuation_rate,
+            "LetterRatioInURL": letter_ratio,
+            "NoOfDegitsInURL": digits,
+            "DegitRatioInURL": digit_ratio,
+            "NoOfOtherSpecialCharsInURL": special,
+            "SpacialCharRatioInURL": special_ratio,
         }
 
-        host = urlparse(self.url).hostname or ""
+    # -----------------------------------------------------
+    # Main Extraction Function
+    # -----------------------------------------------------
 
-        if "." not in host:
-            return 0.50
+    def extract(self, url):
 
-        tld = host.split(".")[-1].lower()
-        return TLD_SCORES.get(tld, 0.50)
+        url = self.normalize_url(url)
 
-    # ==========================================================
-    # MAIN EXTRACTION
-    # ==========================================================
+        html = self.download_html(url)
 
-    def extract(self):
+        line_count, largest_line = self.html_features(html)
 
-        features = {
+        features = self.url_features(url)
 
-            "URLSimilarityIndex":
-                self.url_similarity_index(),
+        features["LineOfCode"] = line_count
+        features["LargestLineLength"] = largest_line
 
-            "LineOfCode":
-                self.line_count(),
+        feature_vector = pd.DataFrame(
+            [[features[col] for col in self.FEATURE_ORDER]],
+            columns=self.FEATURE_ORDER,
+        )
 
-            "IsHTTPS":
-                self.is_https(),
-
-            "URLLength":
-                self.url_length(),
-
-            "TLDLegitimateProb":
-                self.tld_legitimate_prob(),
-
-            "CharContinuationRate":
-                self.char_continuation_rate(),
-
-            "LetterRatioInURL":
-                self.letter_ratio(),
-
-            "NoOfDegitsInURL":
-                self.digit_count(),
-
-            "DegitRatioInURL":
-                self.digit_ratio(),
-
-            "NoOfOtherSpecialCharsInURL":
-                self.special_char_count(),
-
-            "SpacialCharRatioInURL":
-                self.special_char_ratio(),
-
-            "LargestLineLength":
-                self.largest_line()
-
-        }
-
-        return features
-
-
-if __name__ == "__main__":
-
-    url = input("Enter URL: ")
-
-    extractor = FeatureExtractor(url)
-
-    features = extractor.extract()
-
-    print("\nExtracted Features:\n")
-
-    for key, value in features.items():
-        print(f"{key}: {value}")
+        return feature_vector

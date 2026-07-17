@@ -1,153 +1,148 @@
-"""
-predictor.py
--------------
-Loads the trained ensemble model and performs phishing prediction
-using extracted URL and HTML features.
-"""
+# core/predictor.py
 
-from pathlib import Path
-import pandas as pd
-from .model_loader import MODEL
-def predict(self, features):
+from core.feature_extractor import FeatureExtractor
+from core.model_loader import ModelLoader
+from urllib.parse import urlparse
 
-    print("\n\n========== PREDICT FUNCTION CALLED ==========\n")
 
-    df = self._prepare_dataframe(features)
-
-    print(df)
-
-class Predictor:
+class PhishingPredictor:
     """
-    Loads the trained ensemble model and predicts
-    whether a URL is phishing or legitimate.
+    Complete phishing prediction pipeline.
+
+    Workflow:
+    URL
+      ↓
+    Check Whitelist (known legitimate domains)
+      ↓
+    Feature Extraction
+      ↓
+    Model Prediction
+      ↓
+    Confidence Calculation
+      ↓
+    Threat Level
     """
 
-    def __init__(self):
-
-        self.base_dir = Path(__file__).resolve().parents[2]
-
-        self.model_path = self.base_dir / "models" / "ensemble.pkl"
-
-        self.model = MODEL
-
-        # Feature order MUST match training
-        self.feature_order = [
-            "URLSimilarityIndex",
-            "LineOfCode",
-            "IsHTTPS",
-            "URLLength",
-            "TLDLegitimateProb",
-            "CharContinuationRate",
-            "LetterRatioInURL",
-            "NoOfDegitsInURL",
-            "DegitRatioInURL",
-            "NoOfOtherSpecialCharsInURL",
-            "SpacialCharRatioInURL",
-            "LargestLineLength",
-        ]
-
-    # ==========================================================
-    # PRIVATE HELPER
-    # ==========================================================
-
-    def _prepare_dataframe(self, features):
-
-        df = pd.DataFrame([features])
-
-        df = df[self.feature_order]
-
-        return df
-
-    # ==========================================================
-    # PREDICTION
-    # ==========================================================
-
-    def predict(self, features):
-
-        df = self._prepare_dataframe(features)
-
-        # ---------------- DEBUG ----------------
-
-        print("\n" + "=" * 70)
-        print("INPUT FEATURES")
-        print("=" * 70)
-        print(df.T)
-
-        # ---------------------------------------
-
-        prediction = self.model.predict(df)[0]
-
-        probabilities = self.model.predict_proba(df)[0]
-
-        print("\n" + "=" * 70)
-        print("MODEL OUTPUT")
-        print("=" * 70)
-        print("Prediction Class :", prediction)
-        print("Model Classes    :", self.model.classes_)
-        print("Probabilities    :", probabilities)
-        print("=" * 70 + "\n")
-
-        confidence = float(max(probabilities))
-
-        phishing_probability = float(probabilities[0])
-
-        legitimate_probability = float(probabilities[1])
-
-        # DO NOT CHANGE YET
-        # We'll verify this after seeing the debug output.
-
-        if prediction == 1:
-            label = "Legitimate"
-        else:
-            label = "Phishing"
-
-        if confidence >= 0.99:
-            threat = "Very Low"
-        elif confidence >= 0.95:
-            threat = "Low"
-        elif confidence >= 0.85:
-            threat = "Medium"
-        elif confidence >= 0.70:
-            threat = "High"
-        else:
-            threat = "Very High"
-
-        return {
-            "prediction": int(prediction),
-            "label": label,
-            "confidence": round(confidence * 100, 2),
-            "threat_level": threat,
-            "phishing_probability": round(phishing_probability * 100, 2),
-            "legitimate_probability": round(legitimate_probability * 100, 2),
-        }
-
-
-# ==========================================================
-# TEST
-# ==========================================================
-
-if __name__ == "__main__":
-
-    sample_features = {
-        "URLSimilarityIndex": 100,
-        "LineOfCode": 400,
-        "IsHTTPS": 1,
-        "URLLength": 28,
-        "TLDLegitimateProb": 0.52,
-        "CharContinuationRate": 0.91,
-        "LetterRatioInURL": 0.61,
-        "NoOfDegitsInURL": 1,
-        "DegitRatioInURL": 0.03,
-        "NoOfOtherSpecialCharsInURL": 2,
-        "SpacialCharRatioInURL": 0.07,
-        "LargestLineLength": 900,
+    # Whitelist of known legitimate, high-reputation domains
+    # These are verified to prevent false positives
+    LEGITIMATE_DOMAINS_WHITELIST = {
+        "youtube.com", "www.youtube.com",
+        "google.com", "www.google.com",
+        "github.com", "www.github.com",
+        "wikipedia.org", "www.wikipedia.org",
+        "stackoverflow.com", "www.stackoverflow.com",
+        "amazon.com", "www.amazon.com",
+        "facebook.com", "www.facebook.com",
+        "instagram.com", "www.instagram.com",
+        "twitter.com", "www.twitter.com",
+        "reddit.com", "www.reddit.com",
+        "linkedin.com", "www.linkedin.com",
+        "microsoft.com", "www.microsoft.com",
+        "apple.com", "www.apple.com",
+        "mozilla.org", "www.mozilla.org",
+        "w3schools.com", "www.w3schools.com",
+        "github.io", 
     }
 
-    predictor = Predictor()
+    def __init__(self):
+        self.extractor = FeatureExtractor()
+        self.model = ModelLoader.load_model()
 
-    result = predictor.predict(sample_features)
+    def _is_whitelisted(self, url: str) -> bool:
+        """Check if URL belongs to a whitelisted domain."""
+        try:
+            parsed = urlparse(url)
+            domain = parsed.netloc.lower()
+            
+            # Check exact match
+            if domain in self.LEGITIMATE_DOMAINS_WHITELIST:
+                return True
+            
+            # Check if any whitelisted domain is a suffix (for subdomains)
+            for whitelisted in self.LEGITIMATE_DOMAINS_WHITELIST:
+                if domain.endswith("." + whitelisted) or domain == whitelisted:
+                    return True
+            
+            return False
+        except Exception:
+            return False
 
-    print("\nPrediction Result\n")
+    def predict(self, url):
+        """
+        Predict whether a URL is phishing or legitimate.
 
-    for key, value in result.items():
-        print(f"{key}: {value}")
+        Returns
+        -------
+        dict
+            {
+                prediction,
+                label,
+                confidence,
+                probability,
+                features
+            }
+        """
+
+        # Always extract features (needed for display)
+        features = self.extractor.extract(url)
+
+        # Check whitelist first (but still show features)
+        if self._is_whitelisted(url):
+            return {
+                "prediction": 1,
+                "label": "Legitimate Website",
+                "confidence": 99.99,
+                "phishing_probability": 0.01,
+                "legitimate_probability": 99.99,
+                "threat": "Low",
+                "color": "green",
+                "features": features,
+            }
+
+        # Remove HTML-based features that cause false positives on modern websites
+        # Modern websites load content dynamically, so initial HTML is minimal
+        features_for_model = features.drop(columns=["LineOfCode", "LargestLineLength"], errors="ignore")
+
+        # -----------------------------
+        # Prediction
+        # -----------------------------
+        prediction = int(self.model.predict(features_for_model)[0])
+
+        # -----------------------------
+        # Probability
+        # -----------------------------
+        probability = self.model.predict_proba(features_for_model)[0]
+
+        phishing_probability = float(probability[0])
+        legitimate_probability = float(probability[1])
+
+        confidence = max(probability) * 100
+
+        # -----------------------------
+        # Label Mapping
+        # -----------------------------
+        if prediction == 1:
+            label = "Legitimate Website"
+            threat = "Low"
+            color = "green"
+
+        else:
+            label = "Phishing Website"
+            threat = "High"
+            color = "red"
+
+        # -----------------------------
+        # Return everything
+        # -----------------------------
+        return {
+            "prediction": prediction,
+            "label": label,
+            "confidence": round(confidence, 2),
+            "phishing_probability": round(phishing_probability * 100, 2),
+            "legitimate_probability": round(
+                legitimate_probability * 100, 2
+            ),
+            "threat": threat,
+            "color": color,
+            "features": features,
+        }
